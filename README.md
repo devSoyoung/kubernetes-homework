@@ -15,4 +15,4 @@ $ kubectl get pods
 $ kubectl cluster-info
 ```
 
-`http:/[cluster-ip]:[Nodeport]`로 접속
+`http://[cluster-ip]:[Nodeport]`로 접속
