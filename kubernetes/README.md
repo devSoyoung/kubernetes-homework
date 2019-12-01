@@ -232,9 +232,10 @@ Containers:
 
 depends_on과 다른 바로 이 지점이다. depends_on은 의존하는 컨테이너 실행 후 실행되는 것이지만, InitContainer는 해당 컨테이너가 실행된 후 작업이 **완료되어야** 실행되는 것이다.
 
-## Database Reconnection
-
 이 뒤로 statefulSet을 찾아보면서 끝이 안보이는 삽질을 시작했는데, [이런 글](https://medium.com/@xcoulon/initializing-containers-in-order-with-kubernetes-18173b9cc222)을 봐도 데이터베이스 master, slave 구축하는 예제만 나오고 내가 원하는걸 찾을 수가 없었다. 그러다가 [stackoverflow의 글](https://stackoverflow.com/a/53059163/10345249)을 읽었는데, 데이터베이스 재연결의 문제는 Kubernetes의 책임이 아니라 서비스에서 구현해야 할 로직이라고 해서 서버 코드를 수정하기로 했다.
+
+
+## Database Reconnection
 
 > node.js 로 구축한 서버에서 sequelize 라는 ORM 라이브러리를 사용하고 있었는데, reconnection에 대한 config를 손쉽게 할 수 있도록 만들어두어서 쉽게 해결했다.
 
