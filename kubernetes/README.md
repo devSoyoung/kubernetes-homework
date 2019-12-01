@@ -227,9 +227,14 @@ Containers:
       /var/run/secrets/kubernetes.io/serviceaccount from default-token-8dpwm (ro)
 ```
 
-안되는 이유를 고려해봤는데, 초기화 컨테이너는 완료를 목표로 실행하는데, 데이터베이스 서버를 열고 그 뒤에 뭔가 한게 아니니까 완료가 아니다. 그래서 계속 기다리는 것 같다. depends_on과 다르다고 한 부분이 바로 이 지점이다.
+초기화 컨테이너는 완료를 목표로 실행하는데, 데이터베이스 서버를 열고 그 뒤에 뭔가 한게 아니니까 완료가 아니다. 그래서 계속 기다리는 것 같다. 
+> initContainer 예제들도 대부분 특정 응답이 올 때까지 실행하는 커맨드였다. 
 
-이 뒤로 statefulSet을 찾아보면서 끝이 안보이는 삽질을 시작했는데, [이런 글](https://medium.com/@xcoulon/initializing-containers-in-order-with-kubernetes-18173b9cc222)을 봐도 데이터베이스 master, slave 구축 관련된 부분만 나오고 내가 원하는걸 찾을 수가 없었다. 그러다가 [stackoverflow의 글](https://stackoverflow.com/a/53059163/10345249)을 읽었는데, 데이터베이스 재연결의 문제는 Kubernetes의 책임이 아니라 서비스에서 구현해야 할 로직이라고 해서 서버 코드를 수정하기로 했다.
+depends_on과 다른 바로 이 지점이다. depends_on은 의존하는 컨테이너 실행 후 실행되는 것이지만, InitContainer는 해당 컨테이너가 실행된 후 작업이 **완료되어야** 실행되는 것이다.
+
+## Database Reconnection
+
+이 뒤로 statefulSet을 찾아보면서 끝이 안보이는 삽질을 시작했는데, [이런 글](https://medium.com/@xcoulon/initializing-containers-in-order-with-kubernetes-18173b9cc222)을 봐도 데이터베이스 master, slave 구축하는 예제만 나오고 내가 원하는걸 찾을 수가 없었다. 그러다가 [stackoverflow의 글](https://stackoverflow.com/a/53059163/10345249)을 읽었는데, 데이터베이스 재연결의 문제는 Kubernetes의 책임이 아니라 서비스에서 구현해야 할 로직이라고 해서 서버 코드를 수정하기로 했다.
 
 > node.js 로 구축한 서버에서 sequelize 라는 ORM 라이브러리를 사용하고 있었는데, reconnection에 대한 config를 손쉽게 할 수 있도록 만들어두어서 쉽게 해결했다.
 
@@ -243,22 +248,23 @@ Executing (default): SHOW INDEX FROM `Users`
 
 Executing으로 시작하는 부분이 DB 커넥트 이후 테이블을 생성하는 코드인데, 지속적으로 reconnect해서 데이터베이스 컨테이너가 실행된 후 성공적으로 연결되는 것을 확인할 수 있었다.
 
-그 이후에 저장이 계속 안되는 것을 확인했는데, 이유는 프론트엔드에서 localhost로 요청했기 때문이다. origin으로 요청하도록 fetch url을 수정하니 정상적으로 되었다. 그런데 pods 두 개가 데이터를 공유하지 않다 보니 어떨 때는 데이터가 있고 어떨 때는 데이터가 없다.
+그 이후에 저장이 계속 안되는 것을 확인했는데, 이유는 프론트엔드에서 localhost로 요청했기 때문이다. origin으로 요청하도록 url을 수정하니 정상적으로 되었다. 그런데 pods 두 개가 데이터를 공유하지 않다 보니 어떨 때는 데이터가 있고 어떨 때는 데이터가 없다.
+
+## Volume: Pod 데이터 공유 문제
 
 |데이터가 저장되어 있는 pod|데이터가 저장되어 있지 않은 pod|
 |--|--|
 |![data](./exist_data.jpg)|![no_data](./no_data.jpg)|
 
-## Volume
-앱의 특성에 따라서 **컨테이너가 죽더라도 데이터가 사라지면 안되고 보존되어야 하는 경우**가 있습니다. 대표적으로 정보를 파일로 기록해두는 젠킨스가 있습니다. mysql같은 데이터베이스도 컨테이너가 내려가거나 재시작했다고해서 데이터가 사라지면 안됩니다. 그 때 사용할 수 있는게 볼륨입니다.
-
+> 앱의 특성에 따라서 **컨테이너가 죽더라도 데이터가 사라지면 안되고 보존되어야 하는 경우**가 있습니다. 대표적으로 정보를 파일로 기록해두는 젠킨스가 있습니다. mysql같은 데이터베이스도 컨테이너가 내려가거나 재시작했다고해서 데이터가 사라지면 안됩니다. 그 때 사용할 수 있는게 볼륨입니다. 
+>
 > 출처: https://arisu1000.tistory.com/27849
 
-결국 여기에서 아까 잘못갔던 StatefulSet, 그 부분을 공부할 때 나오던 PersistentVolume까지 오게 되었다. 이 PersistentVolume에는 세 가지의 읽기/쓰기 옵션이 있다.
+결국 여기에서 아까 삽질하는 부분을 공부할 때 나오던 PersistentVolume으로 다시 오게 되었다. 이 PersistentVolume에는 세 가지의 읽기/쓰기 옵션이 있다.
 
-* ReadWriteOnce : 단일 노드에 의한 읽기-쓰기로 볼륨이 마운트
-* ReadOnlyMany : 여러 노드에 의한 읽기 전용으로 볼륨이 마운트
-* ReadWriteMany : 여러 노드에 의한 읽기-쓰기로 볼륨이 마운트
+* **ReadWriteOnce** : 단일 노드에 의한 읽기-쓰기로 볼륨이 마운트
+* **ReadOnlyMany** : 여러 노드에 의한 읽기 전용으로 볼륨이 마운트
+* **ReadWriteMany** : 여러 노드에 의한 읽기-쓰기로 볼륨이 마운트
     * Compute Engine 영구 디스크가 지원하는 PersistentVolume은 이 액세스 모드를 지원하지 않음
 
 [ReadWriteMany로 설정](https://medium.com/asl19-developers/create-readwritemany-persistentvolumeclaims-on-your-kubernetes-cluster-3a8db51f98e3)을 하려면 그 기능을 제공해주는 PVC(PersistentVolumeClaim)를 사용해야해서 너무 ~~어려워..진다..~~ 그래서 일단 swarm을 kubernetes로 옮기는 여기까지의 과정으로 프로젝트를 마무리하기로 했다.
