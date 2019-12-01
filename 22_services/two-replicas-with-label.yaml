@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eva-west
+  labels:
+    app: eva
+    release: west
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: eva
+      release: west
+  template:
+    metadata:
+      labels:
+        app: eva
+        release: west
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+        - name: redis
+          image: redis
+          volumeMounts:
+            - name: redis-storage
+              mountPath: /data/redix
+      volumes:
+        - name: redis-storage
+          emptyDir: {}
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eva-east
+  labels:
+    app: eva
+    release: east
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: eva
+      release: east
+  template:
+    metadata:
+      labels:
+        app: eva
+        release: east
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+        - name: redis
+          image: redis
+          volumeMounts:
+            - name: redis-storage
+              mountPath: /data/redis
+      volumes:
+        - name: redis-storage
+          emptyDir: {}

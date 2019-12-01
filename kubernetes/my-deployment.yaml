@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myservice-first
+  labels:
+    app: myservice
+    release: first
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: myservice
+      release: first
+  template:
+    metadata:
+      labels:
+        app: myservice
+        release: first
+    spec:
+      containers:
+        - name: db
+          image: mysql:5.7
+          ports:
+            - containerPort: 3306
+        - name: web
+          image: csylee113/say-service:latest
+          ports:
+            - containerPort: 3000
