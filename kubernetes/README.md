@@ -32,7 +32,7 @@ stateless 앱을 배포할 때 사용하는 가장 기본적인 컨트롤러, �
 ## kind: StatefulSet
 > 쿠버네티스 1.9 버전 부터 정식 적용
 
-statefulSet은 다음 특성을 가지는 애플리케이션에 유용하다.
+수업 때 배우고 실습했던 ReplicaSet과 그보다 좀 더 발전된(?) Deployment는 stateless한 앱을 배포하는 데에 적절한 컨트롤러다. **stateless 하다는 것은 Pod이 수시로 리스타트 되고, 디스크 내용이 사라지더라도 실행에 문제가 없는 경우**를 말한다. 웹서버나 웹 애플리케이션 서버가 해당된다. 이와 대비되는 컨트롤러인 statefulSet은 다음과 같은 특성을 가지는 애플리케이션에 유용하다.
 
 * 안정된, 고유한 네트워크 식별자
 * 안정된, 지속성을 갖는 스토리지
@@ -45,6 +45,8 @@ statefulSet은 다음 특성을 가지는 애플리케이션에 유용하다.
 * pod 이름에 대한 규칙성 부여
 * 배포시 순차적인 Pod 기동과 업데이트
 * 개별 Pod에 대한 디스크 볼륨 관리
+
+* **참고한 글** : [StatefulSet을 이용하여 상태가 유지되는 Pod 관리하기](https://bcho.tistory.com/1306)
 
 ***
 
@@ -179,9 +181,9 @@ DB 연결 실패 시 발생하는 에러다. kubernetes 공식 문서를 살펴�
 * **참고한 글** : https://stackoverflow.com/questions/50385162/how-to-add-pod-dependency-in-kubernetes-as-like-depends-on-in-docker-compose-y
 
 ### 초기화 컨테이너
-k8s에는 depends_on과 유사하게 초기화 컨테이너가 있고, 이 초기화 컨테이너를 통해 Pod 내의 실행 순서를 만들어 줄 수 있다.
+k8s에는 depends_on 대신 초기화 컨테이너가 있다. 이 초기화 컨테이너를 통해 Pod 내의 실행 순서를 만들어 줄 수 있다. 그런데 몇 가지 다른 점이 있다.
 
-* 초기화 컨테이너는 완료를 목표로 실행
+* 초기화 컨테이너는 **완료를 목표**로 실행
 * 각 초기화 컨테이너는 다음 초기화 컨테이너 시작 전 성공적으로 완료되어야 함
 * 초기화 컨테이너가 성공할 때까지 파드를 반복적으로 재시작
     * `restartPolicy: never` : 재시작되지 않음
@@ -225,7 +227,7 @@ Containers:
       /var/run/secrets/kubernetes.io/serviceaccount from default-token-8dpwm (ro)
 ```
 
-안되는 이유를 고려해봤는데, 초기화 컨테이너는 완료를 목표로 실행하는데, 데이터베이스 서버를 열고 그 뒤에 뭔가 한게 아니니까 완료가 아니다. 그래서 계속 기다리는 것 같다.
+안되는 이유를 고려해봤는데, 초기화 컨테이너는 완료를 목표로 실행하는데, 데이터베이스 서버를 열고 그 뒤에 뭔가 한게 아니니까 완료가 아니다. 그래서 계속 기다리는 것 같다. depends_on과 다르다고 한 부분이 바로 이 지점이다.
 
 이 뒤로 statefulSet을 찾아보면서 끝이 안보이는 삽질을 시작했는데, [이런 글](https://medium.com/@xcoulon/initializing-containers-in-order-with-kubernetes-18173b9cc222)을 봐도 데이터베이스 master, slave 구축 관련된 부분만 나오고 내가 원하는걸 찾을 수가 없었다. 그러다가 [stackoverflow의 글](https://stackoverflow.com/a/53059163/10345249)을 읽었는데, 데이터베이스 재연결의 문제는 Kubernetes의 책임이 아니라 서비스에서 구현해야 할 로직이라고 해서 서버 코드를 수정하기로 했다.
 
@@ -241,17 +243,30 @@ Executing (default): SHOW INDEX FROM `Users`
 
 Executing으로 시작하는 부분이 DB 커넥트 이후 테이블을 생성하는 코드인데, 지속적으로 reconnect해서 데이터베이스 컨테이너가 실행된 후 성공적으로 연결되는 것을 확인할 수 있었다.
 
-그 이후에 저장이 계속 안되는 것을 확인했는데, 이유는 프론트엔드에서 localhost로 요청했기 때문이다. origin으로 요청하도록 fetch url을 수정하니 정상적으로 되었다.그런데 pods 두 개가 데이터를 공유하지 않다 보니 어떨 때는 데이터가 있고 어떨 때는 데이터가 없다.
+그 이후에 저장이 계속 안되는 것을 확인했는데, 이유는 프론트엔드에서 localhost로 요청했기 때문이다. origin으로 요청하도록 fetch url을 수정하니 정상적으로 되었다. 그런데 pods 두 개가 데이터를 공유하지 않다 보니 어떨 때는 데이터가 있고 어떨 때는 데이터가 없다.
 
 |데이터가 저장되어 있는 pod|데이터가 저장되어 있지 않은 pod|
 |--|--|
 |![data](./exist_data.jpg)|![no_data](./no_data.jpg)|
 
-수업 때 배우고 실습했던 ReplicaSet과 그보다 좀 더 발전된(?) Deployment는 stateless한 앱을 배포하는 데에 적절한 컨트롤러다. **stateless 하다는 것은 Pod이 수시로 리스타트 되고, 디스크 내용이 사라지더라도 실행에 문제가 없는 경우**를 말한다. 웹서버나 웹 애플리케이션 서버가 해당된다.
+## Volume
+앱의 특성에 따라서 **컨테이너가 죽더라도 데이터가 사라지면 안되고 보존되어야 하는 경우**가 있습니다. 대표적으로 정보를 파일로 기록해두는 젠킨스가 있습니다. mysql같은 데이터베이스도 컨테이너가 내려가거나 재시작했다고해서 데이터가 사라지면 안됩니다. 그 때 사용할 수 있는게 볼륨입니다.
 
-* **참고한 글** : [StatefulSet을 이용하여 상태가 유지되는 Pod 관리하기](https://bcho.tistory.com/1306)
+> 출처: https://arisu1000.tistory.com/27849
+
+결국 여기에서 아까 잘못갔던 StatefulSet, 그 부분을 공부할 때 나오던 PersistentVolume까지 오게 되었다. 이 PersistentVolume에는 세 가지의 읽기/쓰기 옵션이 있다.
+
+* ReadWriteOnce : 단일 노드에 의한 읽기-쓰기로 볼륨이 마운트
+* ReadOnlyMany : 여러 노드에 의한 읽기 전용으로 볼륨이 마운트
+* ReadWriteMany : 여러 노드에 의한 읽기-쓰기로 볼륨이 마운트
+    * Compute Engine 영구 디스크가 지원하는 PersistentVolume은 이 액세스 모드를 지원하지 않음
+
+[ReadWriteMany로 설정](https://medium.com/asl19-developers/create-readwritemany-persistentvolumeclaims-on-your-kubernetes-cluster-3a8db51f98e3)을 하려면 그 기능을 제공해주는 PVC(PersistentVolumeClaim)를 사용해야해서 너무 ~~어려워..진다..~~ 그래서 일단 swarm을 kubernetes로 옮기는 여기까지의 과정으로 프로젝트를 마무리하기로 했다.
 
 
 ## 마무리하며
+swarm으로 실행했던 프로젝트를 kubernetes로 옮기면서 여러 가지 문제를 겪었는데, kubernetes 설정으로 해결한 부분도 있지만, 애플리케이션 코드 자체를 수정해서 해결한 부분도 있었다. 지금까지 프로젝트를 할 때에는 local에서 백엔드 서버를 돌리고 프론트에서 요청했기 때문에 고려할 부분이 많지 않았다. 이번 프로젝트를 하면서 Kubernetes에 대해서도 알게 되었지만 기존에 공부해왔던 웹 개발 과정에서도 좀 더 디테일하고 다양한 부분을 고려할 수 있었다. 
 
+> 그리고 확실히 수업만 들었을 때에는 특히 쿠버네티스로 넘어오면서 이해 안되는 부분이 있었는데 내 케이스에 맞게 설정하고 실행하다보니까 확실히 각 필드가 무엇을 가리키는지 빨리 이해할 수 있는 것 같다. 그치만 혼자 공부하다보면 구글링의 늪에 빠져서 너무 멀리까지 가는 고통도 종종 겪는다.. 너무 괴롭다..
 
+마지막부분에 해결하지 못했던 PV 부분의 경우 실제로 kubernetes를 사용하기 위해서는 꼭 필요한 부분으로 보인다. 이 프로젝트를 나중에 꼭 마무리지어야겠다.
